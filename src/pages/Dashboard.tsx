@@ -25,7 +25,7 @@ import {
   Legend
 } from 'recharts';
 
-const COLORS = ['hsl(220, 70%, 45%)', 'hsl(35, 90%, 50%)', 'hsl(142, 70%, 40%)', 'hsl(0, 72%, 51%)', 'hsl(200, 80%, 50%)'];
+const COLORS = ['hsl(24, 95%, 53%)', 'hsl(0, 0%, 25%)', 'hsl(142, 71%, 45%)', 'hsl(0, 72%, 51%)', 'hsl(38, 92%, 50%)'];
 
 export default function Dashboard() {
   const { getDashboardStats, movements, products, alerts } = useInventoryContext();
@@ -148,8 +148,8 @@ export default function Dashboard() {
                       borderRadius: '8px'
                     }}
                   />
-                  <Bar dataKey="entradas" name="Entradas" fill="hsl(142, 70%, 40%)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="saidas" name="Saídas" fill="hsl(0, 72%, 51%)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="entradas" name="Entradas" fill="hsl(24, 95%, 53%)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="saidas" name="Saídas" fill="hsl(0, 0%, 25%)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
