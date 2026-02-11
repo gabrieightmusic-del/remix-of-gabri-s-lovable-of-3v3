@@ -6,7 +6,7 @@ import {
   ArrowRightLeft, 
   Bell, 
   FileBarChart,
-  Factory,
+  Warehouse,
   ChevronRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -28,17 +28,17 @@ export function Sidebar() {
   const unreadAlerts = alerts.filter(a => !a.isRead).length;
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-50 flex w-[260px] flex-col border-r border-sidebar-border bg-sidebar-background">
+    <aside className="fixed inset-y-0 left-0 z-50 flex w-[260px] flex-col border-r border-sidebar-border bg-sidebar">
       {/* Logo */}
       <div className="flex h-[72px] items-center gap-3 px-6">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-          <Factory className="h-5 w-5 text-primary-foreground" />
+          <Warehouse className="h-5 w-5 text-primary-foreground" />
         </div>
         <div className="flex flex-col">
           <span className="text-[15px] font-bold tracking-tight text-sidebar-foreground">
             3V3 Estoque
           </span>
-          <span className="text-[11px] font-medium text-sidebar-foreground/40 uppercase tracking-widest">
+          <span className="text-[11px] font-medium text-primary uppercase tracking-widest">
             Armazém
           </span>
         </div>

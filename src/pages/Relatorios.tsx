@@ -16,12 +16,12 @@ import {
 } from 'recharts';
 
 const COLORS = [
-  'hsl(220, 70%, 45%)', 'hsl(35, 90%, 50%)', 'hsl(142, 70%, 40%)',
-  'hsl(0, 72%, 51%)', 'hsl(200, 80%, 50%)', 'hsl(280, 65%, 55%)',
-  'hsl(160, 60%, 45%)', 'hsl(45, 85%, 55%)',
+  'hsl(24, 95%, 53%)', 'hsl(0, 0%, 20%)', 'hsl(0, 0%, 45%)',
+  'hsl(24, 80%, 40%)', 'hsl(24, 60%, 65%)', 'hsl(0, 0%, 60%)',
+  'hsl(24, 95%, 70%)', 'hsl(0, 0%, 35%)',
 ];
 
-const ABC_COLORS = { A: 'hsl(142, 70%, 40%)', B: 'hsl(35, 90%, 50%)', C: 'hsl(220, 70%, 45%)' };
+const ABC_COLORS = { A: 'hsl(24, 95%, 53%)', B: 'hsl(0, 0%, 35%)', C: 'hsl(0, 0%, 65%)' };
 
 export default function Relatorios() {
   const { movements, products, collaborators } = useInventoryContext();
@@ -228,7 +228,7 @@ export default function Relatorios() {
                           borderRadius: '8px',
                         }}
                       />
-                      <Bar dataKey="movimentacoes" name="Movimentações" fill="hsl(220, 70%, 45%)" radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="movimentacoes" name="Movimentações" fill="hsl(24, 95%, 53%)" radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
