@@ -11,8 +11,6 @@ export interface Product {
   stockOmie: number;
   location: string;
   curvaABC?: 'A' | 'B' | 'C';
-  purchaseStatus?: PurchaseStatus;
-  addressingStatus?: AddressingStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -28,23 +26,6 @@ export interface StockDivergence {
   diffOmieMinimo: number;        // stockOmie - minStock
   percentDivergence: number;     // % diff between fisico and omie
 }
-
-export type PurchaseStatus = 'COTACAO' | 'PEDIDO' | 'RECEBIMENTO' | 'CONFERENCIA';
-
-export const PURCHASE_STATUSES: { value: PurchaseStatus; label: string }[] = [
-  { value: 'COTACAO', label: 'Cotação' },
-  { value: 'PEDIDO', label: 'Pedido' },
-  { value: 'RECEBIMENTO', label: 'Recebimento' },
-  { value: 'CONFERENCIA', label: 'Conferência' },
-];
-
-export type AddressingStatus = 'NAO_ENDERECADO' | 'ENDERECADO' | 'CONFERIDO';
-
-export const ADDRESSING_STATUSES: { value: AddressingStatus; label: string }[] = [
-  { value: 'NAO_ENDERECADO', label: 'Não Endereçado' },
-  { value: 'ENDERECADO', label: 'Endereçado' },
-  { value: 'CONFERIDO', label: 'Conferido' },
-];
 
 export type ProductCategory =
   | 'EPI'
