@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   ALERTS: 'inventory_alerts',
   COLLABORATORS: 'inventory_collaborators',
   CURRENT_USER: 'inventory_current_user',
+  STORAGE_STRUCTURES: 'inventory_storage_structures',
 } as const;
 
 export function getStorageItem<T>(key: string, defaultValue: T): T {
