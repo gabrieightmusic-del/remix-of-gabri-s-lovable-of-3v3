@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Plus, Search, Edit2, Trash2, Package, AlertTriangle, Upload } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Package, AlertTriangle, Upload, LayoutGrid, TableIcon } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { ImportDialog } from '@/components/ImportDialog';
+import { ProductKanban } from '@/components/products/ProductKanban';
 import { useInventoryContext } from '@/contexts/InventoryContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -35,6 +37,7 @@ export default function Produtos() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
   
   const [formData, setFormData] = useState({
     code: '',
@@ -45,6 +48,7 @@ export default function Produtos() {
     currentStock: 0,
     stockOmie: 0,
     location: '',
+    curvaABC: '' as '' | 'A' | 'B' | 'C',
   });
 
   const filteredProducts = products.filter(p => {
@@ -80,6 +84,7 @@ export default function Produtos() {
         currentStock: product.currentStock,
         stockOmie: product.stockOmie,
         location: product.location,
+        curvaABC: product.curvaABC || '',
       });
     } else {
       setEditingProduct(null);
@@ -92,6 +97,7 @@ export default function Produtos() {
         currentStock: 0,
         stockOmie: 0,
         location: '',
+        curvaABC: '',
       });
     }
     setIsDialogOpen(true);
@@ -99,10 +105,14 @@ export default function Produtos() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const submitData = {
+      ...formData,
+      curvaABC: formData.curvaABC || undefined,
+    };
     if (editingProduct) {
-      updateProduct(editingProduct.id, formData);
+      updateProduct(editingProduct.id, submitData);
     } else {
-      addProduct(formData);
+      addProduct(submitData as Omit<Product, 'id' | 'createdAt' | 'updatedAt'>);
     }
     setIsDialogOpen(false);
   };
@@ -116,6 +126,20 @@ export default function Produtos() {
   const getCategoryLabel = (cat: ProductCategory) => {
     return PRODUCT_CATEGORIES.find(c => c.value === cat)?.label || cat;
   };
+
+  const cycleABC = (product: Product) => {
+    const cycle: (('A' | 'B' | 'C') | undefined)[] = [undefined, 'A', 'B', 'C'];
+    const currentIdx = cycle.indexOf(product.curvaABC);
+    const next = cycle[(currentIdx + 1) % cycle.length];
+    updateProduct(product.id, { curvaABC: next });
+  };
+
+  const ABC_OPTIONS = [
+    { value: '', label: 'Sem classificação' },
+    { value: 'A', label: 'Curva A — Alta prioridade' },
+    { value: 'B', label: 'Curva B — Média prioridade' },
+    { value: 'C', label: 'Curva C — Baixa prioridade' },
+  ];
 
   return (
     <AppLayout title="Produtos" subtitle="Gerenciamento de produtos do estoque">
@@ -233,6 +257,17 @@ export default function Produtos() {
                         onChange={e => setFormData(f => ({ ...f, stockOmie: parseInt(e.target.value) || 0 }))}
                       />
                     </div>
+                    </div>
+
+                  <div className="space-y-2">
+                    <Label>Curva ABC</Label>
+                    <SearchableSelect
+                      options={ABC_OPTIONS}
+                      value={formData.curvaABC}
+                      onValueChange={(v) => setFormData(f => ({ ...f, curvaABC: v as '' | 'A' | 'B' | 'C' }))}
+                      placeholder="Selecione a classificação"
+                      searchPlaceholder="Buscar..."
+                    />
                   </div>
 
                   <div className="flex justify-end gap-2">
@@ -256,8 +291,8 @@ export default function Produtos() {
           />
         </CardHeader>
         <CardContent>
-          {/* Filters */}
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row">
+          {/* Filters + View Toggle */}
+          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -276,8 +311,24 @@ export default function Produtos() {
                 searchPlaceholder="Buscar categoria..."
               />
             </div>
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'table' | 'kanban')} className="shrink-0">
+              <TabsList className="h-9">
+                <TabsTrigger value="table" className="gap-1.5 px-3">
+                  <TableIcon className="h-4 w-4" />
+                  Tabela
+                </TabsTrigger>
+                <TabsTrigger value="kanban" className="gap-1.5 px-3">
+                  <LayoutGrid className="h-4 w-4" />
+                  Kanban
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
 
+          {viewMode === 'kanban' ? (
+            <ProductKanban products={filteredProducts} onEditProduct={handleOpenDialog} />
+          ) : (
+          <>
           {/* Table */}
           <div className="rounded-lg border">
             <Table>
@@ -316,11 +367,19 @@ export default function Produtos() {
                       </TableCell>
                       <TableCell className="font-mono text-sm">{product.location}</TableCell>
                       <TableCell className="text-center">
-                        {product.curvaABC && (
-                          <Badge variant={product.curvaABC === 'A' ? 'default' : product.curvaABC === 'B' ? 'secondary' : 'outline'} className="text-xs">
-                            {product.curvaABC}
-                          </Badge>
-                        )}
+                        <button
+                          onClick={() => cycleABC(product)}
+                          className="inline-flex items-center justify-center rounded-md transition-colors hover:bg-accent/20 px-1 py-0.5"
+                          title="Clique para alterar a classificação ABC"
+                        >
+                          {product.curvaABC ? (
+                            <Badge variant={product.curvaABC === 'A' ? 'default' : product.curvaABC === 'B' ? 'secondary' : 'outline'} className="text-xs cursor-pointer">
+                              {product.curvaABC}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground hover:text-foreground">—</span>
+                          )}
+                        </button>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
@@ -368,6 +427,8 @@ export default function Produtos() {
           <p className="mt-4 text-sm text-muted-foreground">
             {filteredProducts.length} produto(s) encontrado(s)
           </p>
+          </>
+          )}
         </CardContent>
       </Card>
     </AppLayout>
