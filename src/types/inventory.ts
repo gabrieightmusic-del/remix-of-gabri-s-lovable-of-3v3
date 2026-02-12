@@ -70,7 +70,48 @@ export interface WarehouseLocation {
   description: string;
   productTypes?: string; // Tipos de produtos armazenados
   products: string[];
+  capacity?: number;     // Max products this location can hold
+  allowedCategories?: ProductCategory[]; // Categories allowed in this location
 }
+
+// Storage structure template
+export interface StorageStructure {
+  id: string;
+  name: string;
+  shelfPrefix: string;    // e.g. "STNT"
+  shelfStart: number;
+  shelfEnd: number;
+  racksPerShelf: number;
+  rackLabels?: string[];  // Custom labels like ["01", "02", "02B", "03"]
+  defaultType: 'AEREO' | 'PICKING';
+  typeRule?: 'ALL_SAME' | 'LOWER_PICKING_UPPER_AEREO'; // How to assign types
+  pickingCutoff?: number; // Racks <= this are PICKING
+  defaultCapacity?: number;
+  defaultCategories?: ProductCategory[];
+  createdAt: string;
+}
+
+// Warehouse alert types
+export type WarehouseAlertType = 'UNADDRESSED' | 'CAPACITY_EXCEEDED' | 'MULTI_LOCATION' | 'EMPTY_LOCATION';
+
+export interface WarehouseAlert {
+  id: string;
+  type: WarehouseAlertType;
+  productId?: string;
+  productCode?: string;
+  locationId?: string;
+  locationDescription?: string;
+  message: string;
+  details?: string;
+  createdAt: string;
+}
+
+export const WAREHOUSE_ALERT_LABELS: Record<WarehouseAlertType, string> = {
+  UNADDRESSED: 'Produto sem endereço',
+  CAPACITY_EXCEEDED: 'Capacidade excedida',
+  MULTI_LOCATION: 'Múltiplos endereços',
+  EMPTY_LOCATION: 'Endereço vazio',
+};
 
 export interface Movement {
   id: string;
