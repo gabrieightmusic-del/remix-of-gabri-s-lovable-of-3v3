@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { Product } from '@/types/inventory';
 
-type KanbanScenario = 'lifecycle' | 'stock_status' | 'abc_curve';
+type KanbanScenario = 'lifecycle' | 'stock_status' | 'abc_curve' | 'purchase_flow' | 'addressing';
 
 interface KanbanColumn {
   id: string;
@@ -18,6 +18,8 @@ const SCENARIOS: { value: KanbanScenario; label: string }[] = [
   { value: 'lifecycle', label: 'Ciclo de Vida' },
   { value: 'stock_status', label: 'Status de Estoque' },
   { value: 'abc_curve', label: 'Curva ABC' },
+  { value: 'purchase_flow', label: 'Fluxo de Compras' },
+  { value: 'addressing', label: 'Status de Endereçamento' },
 ];
 
 function getColumns(scenario: KanbanScenario): KanbanColumn[] {
@@ -41,6 +43,20 @@ function getColumns(scenario: KanbanScenario): KanbanColumn[] {
         { id: 'B', title: 'Curva B', color: 'bg-warning/15 border-warning/30', filter: p => p.curvaABC === 'B' },
         { id: 'C', title: 'Curva C', color: 'bg-muted border-border', filter: p => p.curvaABC === 'C' },
         { id: 'none', title: 'Sem Classificação', color: 'bg-secondary border-border', filter: p => !p.curvaABC },
+      ];
+    case 'purchase_flow':
+      return [
+        { id: 'cotacao', title: 'Cotação', color: 'bg-info/15 border-info/30', filter: p => p.purchaseStatus === 'COTACAO' },
+        { id: 'pedido', title: 'Pedido', color: 'bg-warning/15 border-warning/30', filter: p => p.purchaseStatus === 'PEDIDO' },
+        { id: 'recebimento', title: 'Recebimento', color: 'bg-primary/15 border-primary/30', filter: p => p.purchaseStatus === 'RECEBIMENTO' },
+        { id: 'conferencia', title: 'Conferência', color: 'bg-success/15 border-success/30', filter: p => p.purchaseStatus === 'CONFERENCIA' },
+        { id: 'sem_status', title: 'Sem Status', color: 'bg-secondary border-border', filter: p => !p.purchaseStatus },
+      ];
+    case 'addressing':
+      return [
+        { id: 'nao_enderecado', title: 'Não Endereçado', color: 'bg-destructive/15 border-destructive/30', filter: p => !p.addressingStatus || p.addressingStatus === 'NAO_ENDERECADO' },
+        { id: 'enderecado', title: 'Endereçado', color: 'bg-warning/15 border-warning/30', filter: p => p.addressingStatus === 'ENDERECADO' },
+        { id: 'conferido', title: 'Conferido', color: 'bg-success/15 border-success/30', filter: p => p.addressingStatus === 'CONFERIDO' },
       ];
   }
 }
