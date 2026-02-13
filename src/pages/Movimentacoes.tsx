@@ -270,7 +270,7 @@ export default function Movimentacoes() {
                         ...productLocations.map(loc => ({
                           value: loc.id,
                           label: loc.description,
-                          sublabel: `${loc.type} · ${loc.products.length} produto(s)`,
+                          sublabel: `${loc.type} · Estoque: ${selectedProduct!.currentStock} ${selectedProduct!.unit}`,
                         })),
                         ...(selectedProduct && productLocations.length === 0
                           ? [{ value: '__sem_endereco__', label: 'Sem endereço (produto não endereçado)', sublabel: 'Produto ainda não alocado em nenhum endereço' }]
