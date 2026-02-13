@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, ArrowRightLeft, ArrowUpCircle, ArrowDownCircle, RefreshCw, AlertOctagon, XCircle, Search, Repeat, Pencil, Trash2, Boxes } from 'lucide-react';
+import { Plus, ArrowRightLeft, ArrowUpCircle, ArrowDownCircle, RefreshCw, AlertOctagon, XCircle, Search, Repeat, Pencil, Trash2, Boxes, MapPin } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useInventoryContext } from '@/contexts/InventoryContext';
 import { Button } from '@/components/ui/button';
@@ -23,8 +23,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { MovementType, MovementPurpose } from '@/types/inventory';
 import { MOVEMENT_PURPOSES } from '@/types/inventory';
-import type { ProductionExitType, ProductionOrderItem } from '@/types/composition';
-import { PRODUCTION_EXIT_TYPES } from '@/types/composition';
+import type { ProductionExitType, ProductionOrderItem, ProductionStatus } from '@/types/composition';
+import { PRODUCTION_EXIT_TYPES, PRODUCTION_STATUSES } from '@/types/composition';
 import { useToast } from '@/hooks/use-toast';
 
 const MOVEMENT_TYPES: { value: MovementType; label: string; icon: React.ReactNode; color: string }[] = [
@@ -40,7 +40,6 @@ export default function Movimentacoes() {
   const { movements, products, locations, currentUser, compositions, addMovement, updateMovement, deleteMovement, addProductionOrder } = useInventoryContext();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isProductionDialogOpen, setIsProductionDialogOpen] = useState(false);
   const [editingMovement, setEditingMovement] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -56,12 +55,14 @@ export default function Movimentacoes() {
     observations: '',
   });
 
-  // Production composition state
+  // Production composition state (now inline in the main form)
   const [selectedCompositionId, setSelectedCompositionId] = useState('');
   const [exitType, setExitType] = useState<ProductionExitType>('INTEGRAL');
   const [productionItems, setProductionItems] = useState<ProductionOrderItem[]>([]);
-  const [productionProjectCode, setProductionProjectCode] = useState('');
-  const [productionObservations, setProductionObservations] = useState('');
+  const [productionStatus, setProductionStatus] = useState<ProductionStatus>('INCOMPLETA');
+
+  // Derived: is this a production exit?
+  const isProductionExit = formData.type === 'SAIDA' && formData.purpose === 'PRODUCAO';
 
   const filteredMovements = movements.filter(m => {
     const matchesSearch = 
@@ -91,8 +92,51 @@ export default function Movimentacoes() {
     ...MOVEMENT_TYPES.map(t => ({ value: t.value, label: t.label })),
   ];
 
+  const activeCompositions = compositions.filter(c => c.isActive);
+  const compositionOptions = activeCompositions.map(c => ({
+    value: c.id,
+    label: `${c.code} - ${c.name}`,
+    sublabel: `${c.items.length} itens`,
+  }));
+
+  const handleSelectComposition = (compId: string) => {
+    setSelectedCompositionId(compId);
+    const comp = compositions.find(c => c.id === compId);
+    if (!comp) return;
+    setProductionItems(comp.items.map(item => ({
+      productId: item.productId,
+      productCode: item.productCode,
+      productDescription: item.productDescription,
+      requiredQty: item.quantity * formData.quantity,
+      deliveredQty: item.quantity * formData.quantity,
+      unit: item.unit,
+      selected: true,
+    })));
+  };
+
+  // Update production items when composition qty changes
+  const handleCompositionQtyChange = (qty: number) => {
+    setFormData(f => ({ ...f, quantity: qty }));
+    const comp = compositions.find(c => c.id === selectedCompositionId);
+    if (!comp) return;
+    setProductionItems(prev => prev.map((item, idx) => {
+      const baseQty = comp.items[idx]?.quantity || item.requiredQty;
+      return {
+        ...item,
+        requiredQty: baseQty * qty,
+        deliveredQty: exitType === 'FRACIONADA' ? item.deliveredQty : baseQty * qty,
+      };
+    }));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isProductionExit) {
+      handleProductionSubmit();
+      return;
+    }
+
     if (!selectedProduct) return;
 
     if (['SAIDA', 'AVARIA', 'PERDA'].includes(formData.type)) {
@@ -107,11 +151,7 @@ export default function Movimentacoes() {
     }
 
     if (formData.quantity <= 0) {
-      toast({
-        title: 'Quantidade inválida',
-        description: 'A quantidade deve ser maior que zero.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Quantidade inválida', description: 'A quantidade deve ser maior que zero.', variant: 'destructive' });
       return;
     }
 
@@ -152,69 +192,15 @@ export default function Movimentacoes() {
       toast({ title: 'Movimentação registrada', description: `${formData.type} de ${formData.quantity} ${selectedProduct.unit} - ${selectedProduct.code}` });
     }
 
-    setIsDialogOpen(false);
-    setEditingMovement(null);
-    setFormData({
-      productId: '',
-      type: 'SAIDA',
-      quantity: 1,
-      destination: '',
-      purpose: 'SERVICO',
-      projectCode: '',
-      equipmentCode: '',
-      observations: '',
-    });
-  };
-
-  const handleEdit = (movement: typeof movements[0]) => {
-    setEditingMovement(movement.id);
-    setFormData({
-      productId: movement.productId,
-      type: movement.type,
-      quantity: movement.quantity,
-      destination: '',
-      purpose: movement.purpose,
-      projectCode: movement.projectCode || '',
-      equipmentCode: movement.equipmentCode || '',
-      observations: movement.observations || '',
-    });
-    setIsDialogOpen(true);
-  };
-
-  const handleDelete = (id: string) => {
-    deleteMovement(id);
-    toast({ title: 'Movimentação excluída', description: 'O estoque foi ajustado automaticamente.' });
-  };
-
-  // Composition options for production
-  const activeCompositions = compositions.filter(c => c.isActive);
-  const compositionOptions = activeCompositions.map(c => ({
-    value: c.id,
-    label: `${c.code} - ${c.name}`,
-    sublabel: `${c.items.length} itens`,
-  }));
-
-  const handleSelectComposition = (compId: string) => {
-    setSelectedCompositionId(compId);
-    const comp = compositions.find(c => c.id === compId);
-    if (!comp) return;
-    setProductionItems(comp.items.map(item => {
-      const prod = products.find(p => p.id === item.productId);
-      return {
-        productId: item.productId,
-        productCode: item.productCode,
-        productDescription: item.productDescription,
-        requiredQty: item.quantity,
-        deliveredQty: item.quantity,
-        unit: item.unit,
-        selected: true,
-      };
-    }));
+    closeAndResetDialog();
   };
 
   const handleProductionSubmit = () => {
     const comp = compositions.find(c => c.id === selectedCompositionId);
-    if (!comp) return;
+    if (!comp) {
+      toast({ title: 'Selecione uma composição', variant: 'destructive' });
+      return;
+    }
 
     const itemsToProcess = exitType === 'INTEGRAL'
       ? productionItems
@@ -259,41 +245,76 @@ export default function Movimentacoes() {
         origin: prod.location || 'SEM ENDEREÇO',
         destination: 'PRODUÇÃO',
         purpose: 'PRODUCAO',
-        projectCode: productionProjectCode || undefined,
+        projectCode: formData.projectCode || undefined,
         equipmentCode: comp.code,
         collaborator: currentUser || 'Sistema',
-        observations: productionObservations || `Composição: ${comp.code} - ${comp.name} (${exitType})`,
+        observations: formData.observations || `Composição: ${comp.code} - ${comp.name} (${exitType})`,
       });
       movementIds.push(mov.id);
     }
 
-    // Create production order for traceability
     addProductionOrder({
       compositionId: comp.id,
       compositionCode: comp.code,
       compositionName: comp.name,
-      projectCode: productionProjectCode,
+      projectCode: formData.projectCode,
       exitType,
       items: itemsToProcess.map(i => ({
         ...i,
         deliveredQty: exitType === 'FRACIONADA' ? i.deliveredQty : i.requiredQty,
       })),
-      status: exitType === 'INTEGRAL' ? 'CONCLUIDA' : itemsToProcess.length < comp.items.length ? 'PARCIAL' : 'CONCLUIDA',
+      status: productionStatus,
+      productionStatus,
       collaborator: currentUser || 'Sistema',
       movementIds,
+      compositionQty: formData.quantity,
     });
 
     toast({
       title: 'Saída para produção registrada',
-      description: `${itemsToProcess.length} itens da composição ${comp.code} baixados do estoque.`,
+      description: `${itemsToProcess.length} itens da composição ${comp.code} (x${formData.quantity}) baixados do estoque.`,
     });
 
-    setIsProductionDialogOpen(false);
+    closeAndResetDialog();
+  };
+
+  const closeAndResetDialog = () => {
+    setIsDialogOpen(false);
+    setEditingMovement(null);
+    setFormData({
+      productId: '',
+      type: 'SAIDA',
+      quantity: 1,
+      destination: '',
+      purpose: 'SERVICO',
+      projectCode: '',
+      equipmentCode: '',
+      observations: '',
+    });
     setSelectedCompositionId('');
     setExitType('INTEGRAL');
     setProductionItems([]);
-    setProductionProjectCode('');
-    setProductionObservations('');
+    setProductionStatus('INCOMPLETA');
+  };
+
+  const handleEdit = (movement: typeof movements[0]) => {
+    setEditingMovement(movement.id);
+    setFormData({
+      productId: movement.productId,
+      type: movement.type,
+      quantity: movement.quantity,
+      destination: '',
+      purpose: movement.purpose,
+      projectCode: movement.projectCode || '',
+      equipmentCode: movement.equipmentCode || '',
+      observations: movement.observations || '',
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    deleteMovement(id);
+    toast({ title: 'Movimentação excluída', description: 'O estoque foi ajustado automaticamente.' });
   };
 
   const getTypeInfo = (type: MovementType) => MOVEMENT_TYPES.find(t => t.value === type);
@@ -307,21 +328,18 @@ export default function Movimentacoes() {
               <ArrowRightLeft className="h-5 w-5" />
               Histórico de Movimentações
             </CardTitle>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setIsProductionDialogOpen(true)} disabled={activeCompositions.length === 0}>
-                <Boxes className="mr-2 h-4 w-4" />
-                Saída Produção
-              </Button>
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) closeAndResetDialog(); else setIsDialogOpen(true); }}>
               <DialogTrigger asChild>
                 <Button>
                   <Plus className="mr-2 h-4 w-4" />
                   Nova Movimentação
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-lg">
+              <DialogContent className={isProductionExit ? "max-w-2xl max-h-[90vh] overflow-y-auto" : "max-w-lg"}>
                 <DialogHeader>
-                  <DialogTitle>{editingMovement ? 'Editar Movimentação' : 'Registrar Movimentação'}</DialogTitle>
+                  <DialogTitle>
+                    {editingMovement ? 'Editar Movimentação' : isProductionExit ? 'Saída para Produção' : 'Registrar Movimentação'}
+                  </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   {/* Movement Type Selector */}
@@ -346,119 +364,310 @@ export default function Movimentacoes() {
                     </div>
                   </div>
 
-                  {/* Product Selection */}
+                  {/* Purpose - moved up for production flow */}
                   <div className="space-y-2">
-                    <Label htmlFor="product">Produto</Label>
+                    <Label htmlFor="purpose">Finalidade</Label>
                     <SearchableSelect
-                      options={productOptions}
-                      value={formData.productId}
-                      onValueChange={value => setFormData(f => ({ ...f, productId: value }))}
-                      placeholder="Selecione o produto"
-                      searchPlaceholder="Buscar por código ou descrição..."
-                      emptyMessage="Nenhum produto encontrado."
+                      options={purposeOptions}
+                      value={formData.purpose}
+                      onValueChange={(value) => {
+                        setFormData(f => ({ ...f, purpose: value as MovementPurpose }));
+                        // Reset production state when switching away from production
+                        if (value !== 'PRODUCAO') {
+                          setSelectedCompositionId('');
+                          setProductionItems([]);
+                          setExitType('INTEGRAL');
+                          setProductionStatus('INCOMPLETA');
+                        }
+                      }}
+                      placeholder="Selecione"
+                      searchPlaceholder="Buscar finalidade..."
                     />
-                    {selectedProduct && (
-                      <div className="rounded bg-muted/50 p-2 text-sm">
-                        <p className="text-muted-foreground">
-                          Estoque: <span className={`font-medium ${selectedProduct.currentStock < selectedProduct.minStock ? 'text-warning' : 'text-foreground'}`}>
-                            {selectedProduct.currentStock} {selectedProduct.unit}
-                          </span>
-                          {' · '}Local: <span className="font-mono">{selectedProduct.location}</span>
-                        </p>
-                        {['SAIDA', 'AVARIA', 'PERDA'].includes(formData.type) && formData.quantity > selectedProduct.currentStock && (
-                          <p className="mt-1 text-xs font-medium text-destructive">
-                            ⚠ Quantidade excede o estoque disponível!
+                  </div>
+
+                  {/* === PRODUCTION EXIT FIELDS === */}
+                  {isProductionExit ? (
+                    <>
+                      {/* Composition Selection */}
+                      <div className="space-y-2">
+                        <Label>Composição</Label>
+                        <SearchableSelect
+                          options={compositionOptions}
+                          value={selectedCompositionId}
+                          onValueChange={handleSelectComposition}
+                          placeholder="Selecione a composição..."
+                          searchPlaceholder="Buscar composição..."
+                          emptyMessage="Nenhuma composição ativa."
+                        />
+                      </div>
+
+                      {/* Composition Quantity */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Qtd de Composições</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={formData.quantity}
+                            onChange={e => handleCompositionQtyChange(parseInt(e.target.value) || 1)}
+                            required
+                          />
+                          <p className="text-[11px] text-muted-foreground">Quantas composições serão produzidas</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Código do Projeto</Label>
+                          <Input
+                            value={formData.projectCode}
+                            onChange={e => setFormData(f => ({ ...f, projectCode: e.target.value }))}
+                            placeholder="Ex: PRD01733"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Exit Type */}
+                      {selectedCompositionId && (
+                        <div className="space-y-2">
+                          <Label>Tipo de Saída</Label>
+                          <div className="grid grid-cols-3 gap-2">
+                            {PRODUCTION_EXIT_TYPES.map(t => (
+                              <button
+                                key={t.value}
+                                type="button"
+                                onClick={() => {
+                                  setExitType(t.value);
+                                  if (t.value === 'INTEGRAL') {
+                                    setProductionItems(prev => prev.map(i => ({ ...i, selected: true })));
+                                  }
+                                }}
+                                className={`rounded-lg border p-3 text-left text-sm transition-all ${
+                                  exitType === t.value
+                                    ? 'border-primary bg-primary/10 text-primary'
+                                    : 'border-border hover:bg-muted'
+                                }`}
+                              >
+                                <p className="font-medium">{t.label}</p>
+                                <p className="text-[11px] text-muted-foreground">{t.description}</p>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Items Table with Location */}
+                      {productionItems.length > 0 && (
+                        <div className="space-y-2">
+                          <Label>Itens ({productionItems.filter(i => i.selected).length}/{productionItems.length} selecionados)</Label>
+                          <div className="rounded-lg border">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  {exitType !== 'INTEGRAL' && <TableHead className="w-10"></TableHead>}
+                                  <TableHead>Produto</TableHead>
+                                  <TableHead>Localização</TableHead>
+                                  <TableHead className="text-right">Necessário</TableHead>
+                                  {exitType === 'FRACIONADA' && <TableHead className="text-right">Qtd Saída</TableHead>}
+                                  <TableHead className="text-right">Estoque</TableHead>
+                                  <TableHead className="text-center">Status</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {productionItems.map((item, idx) => {
+                                  const prod = products.find(p => p.id === item.productId);
+                                  const stock = prod?.currentStock ?? 0;
+                                  const location = prod?.location || 'Sem endereço';
+                                  const qtyNeeded = exitType === 'FRACIONADA' ? item.deliveredQty : item.requiredQty;
+                                  const sufficient = stock >= qtyNeeded;
+                                  return (
+                                    <TableRow key={item.productId} className={!item.selected && exitType !== 'INTEGRAL' ? 'opacity-40' : ''}>
+                                      {exitType !== 'INTEGRAL' && (
+                                        <TableCell>
+                                          <Checkbox
+                                            checked={item.selected}
+                                            onCheckedChange={(checked) => {
+                                              setProductionItems(prev => prev.map((i, j) =>
+                                                j === idx ? { ...i, selected: !!checked } : i
+                                              ));
+                                            }}
+                                          />
+                                        </TableCell>
+                                      )}
+                                      <TableCell>
+                                        <p className="font-mono text-xs">{item.productCode}</p>
+                                        <p className="max-w-[160px] truncate text-xs text-muted-foreground">{item.productDescription}</p>
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="flex items-center gap-1">
+                                          <MapPin className="h-3 w-3 text-muted-foreground" />
+                                          <span className="font-mono text-xs">{location}</span>
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-right font-medium">{item.requiredQty} {item.unit}</TableCell>
+                                      {exitType === 'FRACIONADA' && (
+                                        <TableCell className="text-right">
+                                          <Input
+                                            type="number"
+                                            min="1"
+                                            max={stock}
+                                            value={item.deliveredQty}
+                                            onChange={e => {
+                                              const val = parseInt(e.target.value) || 1;
+                                              setProductionItems(prev => prev.map((i, j) =>
+                                                j === idx ? { ...i, deliveredQty: val } : i
+                                              ));
+                                            }}
+                                            className="h-8 w-20 ml-auto text-right"
+                                          />
+                                        </TableCell>
+                                      )}
+                                      <TableCell className={`text-right font-medium ${sufficient ? 'text-success' : 'text-destructive'}`}>
+                                        {stock} {item.unit}
+                                      </TableCell>
+                                      <TableCell className="text-center">
+                                        {sufficient ? (
+                                          <Badge className="bg-success text-success-foreground">OK</Badge>
+                                        ) : (
+                                          <Badge variant="destructive">Insuficiente</Badge>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Production Status */}
+                      <div className="space-y-2">
+                        <Label>Status da Produção</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {PRODUCTION_STATUSES.map(s => (
+                            <button
+                              key={s.value}
+                              type="button"
+                              onClick={() => setProductionStatus(s.value)}
+                              className={`rounded-lg border p-3 text-left text-sm transition-all ${
+                                productionStatus === s.value
+                                  ? 'border-primary bg-primary/10 text-primary'
+                                  : 'border-border hover:bg-muted'
+                              }`}
+                            >
+                              <p className="font-medium">{s.label}</p>
+                              <p className="text-[11px] text-muted-foreground">{s.description}</p>
+                            </button>
+                          ))}
+                        </div>
+                        {productionStatus === 'CANCELADA' && (
+                          <p className="text-xs text-warning">⚠ Ao cancelar, os itens retornarão automaticamente ao estoque.</p>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* === STANDARD MOVEMENT FIELDS === */}
+                      {/* Product Selection */}
+                      <div className="space-y-2">
+                        <Label htmlFor="product">Produto</Label>
+                        <SearchableSelect
+                          options={productOptions}
+                          value={formData.productId}
+                          onValueChange={value => setFormData(f => ({ ...f, productId: value }))}
+                          placeholder="Selecione o produto"
+                          searchPlaceholder="Buscar por código ou descrição..."
+                          emptyMessage="Nenhum produto encontrado."
+                        />
+                        {selectedProduct && (
+                          <div className="rounded bg-muted/50 p-2 text-sm">
+                            <p className="text-muted-foreground">
+                              Estoque: <span className={`font-medium ${selectedProduct.currentStock < selectedProduct.minStock ? 'text-warning' : 'text-foreground'}`}>
+                                {selectedProduct.currentStock} {selectedProduct.unit}
+                              </span>
+                              {' · '}Local: <span className="font-mono">{selectedProduct.location}</span>
+                            </p>
+                            {['SAIDA', 'AVARIA', 'PERDA'].includes(formData.type) && formData.quantity > selectedProduct.currentStock && (
+                              <p className="mt-1 text-xs font-medium text-destructive">
+                                ⚠ Quantidade excede o estoque disponível!
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Quantity */}
+                      <div className="space-y-2">
+                        <Label htmlFor="quantity">Quantidade</Label>
+                        <Input
+                          id="quantity"
+                          type="number"
+                          min="1"
+                          value={formData.quantity}
+                          onChange={e => setFormData(f => ({ ...f, quantity: parseInt(e.target.value) || 1 }))}
+                          required
+                        />
+                      </div>
+
+                      {/* Project Code (for production purpose in non-composition context) */}
+                      {formData.purpose === 'PRODUCAO' && (
+                        <div className="space-y-2">
+                          <Label htmlFor="projectCode">Código do Projeto/Equipamento</Label>
+                          <Input
+                            id="projectCode"
+                            value={formData.projectCode}
+                            onChange={e => setFormData(f => ({ ...f, projectCode: e.target.value }))}
+                            placeholder="Ex: PRD01733, 0000000726"
+                          />
+                        </div>
+                      )}
+
+                      {/* Origin/Destination Address */}
+                      <div className="space-y-2">
+                        <Label>
+                          {formData.type === 'ENTRADA' ? 'Destino (endereço)' : 'Endereço de origem'}
+                        </Label>
+                        {(() => {
+                          const normalizeAddr = (s: string) => s.replace(/[\s\-]+/g, '').toUpperCase();
+                          const productLocations = selectedProduct
+                            ? locations.filter(loc => 
+                                loc.products.includes(selectedProduct.id) || 
+                                normalizeAddr(loc.description).includes(normalizeAddr(selectedProduct.location))
+                              )
+                            : [];
+                          
+                          const addressOptions = [
+                            ...productLocations.map(loc => ({
+                              value: loc.id,
+                              label: loc.description,
+                              sublabel: `${loc.type} · Estoque: ${selectedProduct!.currentStock} ${selectedProduct!.unit}`,
+                            })),
+                            ...(selectedProduct && productLocations.length === 0
+                              ? [{ value: '__sem_endereco__', label: 'Sem endereço (produto não endereçado)', sublabel: 'Produto ainda não alocado em nenhum endereço' }]
+                              : []),
+                            { value: 'EXTERNO', label: 'Externo', sublabel: 'Origem/destino externo ao armazém' },
+                          ];
+
+                          return (
+                            <SearchableSelect
+                              options={addressOptions}
+                              value={formData.destination}
+                              onValueChange={value => setFormData(f => ({ ...f, destination: value }))}
+                              placeholder={selectedProduct ? 'Selecione o endereço' : 'Selecione um produto primeiro'}
+                              searchPlaceholder="Buscar endereço..."
+                              emptyMessage="Nenhum endereço encontrado."
+                              disabled={!selectedProduct}
+                            />
+                          );
+                        })()}
+                        {formData.destination === '__sem_endereco__' && (
+                          <p className="text-xs text-warning">
+                            ⚠ Este produto ainda não possui endereçamento. Realize o endereçamento no módulo Armazém.
                           </p>
                         )}
                       </div>
-                    )}
-                  </div>
-
-                  {/* Quantity and Purpose */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="quantity">Quantidade</Label>
-                      <Input
-                        id="quantity"
-                        type="number"
-                        min="1"
-                        value={formData.quantity}
-                        onChange={e => setFormData(f => ({ ...f, quantity: parseInt(e.target.value) || 1 }))}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="purpose">Finalidade</Label>
-                      <SearchableSelect
-                        options={purposeOptions}
-                        value={formData.purpose}
-                        onValueChange={(value) => setFormData(f => ({ ...f, purpose: value as MovementPurpose }))}
-                        placeholder="Selecione"
-                        searchPlaceholder="Buscar finalidade..."
-                      />
-                    </div>
-                  </div>
-
-                  {/* Project Code (for production) */}
-                  {formData.purpose === 'PRODUCAO' && (
-                    <div className="space-y-2">
-                      <Label htmlFor="projectCode">Código do Projeto/Equipamento</Label>
-                      <Input
-                        id="projectCode"
-                        value={formData.projectCode}
-                        onChange={e => setFormData(f => ({ ...f, projectCode: e.target.value }))}
-                        placeholder="Ex: PRD01733, 0000000726"
-                      />
-                    </div>
+                    </>
                   )}
 
-                  {/* Origin/Destination Address */}
-                  <div className="space-y-2">
-                    <Label>
-                      {formData.type === 'ENTRADA' ? 'Destino (endereço)' : 'Endereço de origem'}
-                    </Label>
-                    {(() => {
-                      // Build address options based on selected product
-                      const normalizeAddr = (s: string) => s.replace(/[\s\-]+/g, '').toUpperCase();
-                      const productLocations = selectedProduct
-                        ? locations.filter(loc => 
-                            loc.products.includes(selectedProduct.id) || 
-                            normalizeAddr(loc.description).includes(normalizeAddr(selectedProduct.location))
-                          )
-                        : [];
-                      
-                      const addressOptions = [
-                        ...productLocations.map(loc => ({
-                          value: loc.id,
-                          label: loc.description,
-                          sublabel: `${loc.type} · Estoque: ${selectedProduct!.currentStock} ${selectedProduct!.unit}`,
-                        })),
-                        ...(selectedProduct && productLocations.length === 0
-                          ? [{ value: '__sem_endereco__', label: 'Sem endereço (produto não endereçado)', sublabel: 'Produto ainda não alocado em nenhum endereço' }]
-                          : []),
-                        { value: 'EXTERNO', label: 'Externo', sublabel: 'Origem/destino externo ao armazém' },
-                      ];
-
-                      return (
-                        <SearchableSelect
-                          options={addressOptions}
-                          value={formData.destination}
-                          onValueChange={value => setFormData(f => ({ ...f, destination: value }))}
-                          placeholder={selectedProduct ? 'Selecione o endereço' : 'Selecione um produto primeiro'}
-                          searchPlaceholder="Buscar endereço..."
-                          emptyMessage="Nenhum endereço encontrado."
-                          disabled={!selectedProduct}
-                        />
-                      );
-                    })()}
-                    {formData.destination === '__sem_endereco__' && (
-                      <p className="text-xs text-warning">
-                        ⚠ Este produto ainda não possui endereçamento. Realize o endereçamento no módulo Armazém.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Observations */}
+                  {/* Observations (shared) */}
                   <div className="space-y-2">
                     <Label htmlFor="observations">Observações</Label>
                     <Textarea
@@ -478,17 +687,22 @@ export default function Movimentacoes() {
                   </div>
 
                   <div className="flex justify-end gap-2">
-                    <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                    <Button type="button" variant="outline" onClick={closeAndResetDialog}>
                       Cancelar
                     </Button>
-                    <Button type="submit" disabled={!formData.productId}>
-                      Registrar
+                    <Button 
+                      type="submit" 
+                      disabled={isProductionExit 
+                        ? !selectedCompositionId || productionItems.filter(i => i.selected).length === 0 
+                        : !formData.productId
+                      }
+                    >
+                      {isProductionExit ? 'Confirmar Saída' : 'Registrar'}
                     </Button>
                   </div>
                 </form>
               </DialogContent>
             </Dialog>
-            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -623,178 +837,6 @@ export default function Movimentacoes() {
           </p>
         </CardContent>
       </Card>
-
-      {/* Production Composition Dialog */}
-      <Dialog open={isProductionDialogOpen} onOpenChange={setIsProductionDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Boxes className="h-5 w-5" />
-              Saída para Produção - Composição
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            {/* Composition Selection */}
-            <div className="space-y-2">
-              <Label>Composição</Label>
-              <SearchableSelect
-                options={compositionOptions}
-                value={selectedCompositionId}
-                onValueChange={handleSelectComposition}
-                placeholder="Selecione a composição..."
-                searchPlaceholder="Buscar composição..."
-                emptyMessage="Nenhuma composição ativa."
-              />
-            </div>
-
-            {/* Project Code */}
-            <div className="space-y-2">
-              <Label>Código do Projeto</Label>
-              <Input
-                value={productionProjectCode}
-                onChange={e => setProductionProjectCode(e.target.value)}
-                placeholder="Ex: PRD01733, 0000000726"
-              />
-            </div>
-
-            {/* Exit Type */}
-            {selectedCompositionId && (
-              <div className="space-y-2">
-                <Label>Tipo de Saída</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {PRODUCTION_EXIT_TYPES.map(t => (
-                    <button
-                      key={t.value}
-                      type="button"
-                      onClick={() => {
-                        setExitType(t.value);
-                        if (t.value === 'INTEGRAL') {
-                          setProductionItems(prev => prev.map(i => ({ ...i, selected: true })));
-                        }
-                      }}
-                      className={`rounded-lg border p-3 text-left text-sm transition-all ${
-                        exitType === t.value
-                          ? 'border-primary bg-primary/10 text-primary'
-                          : 'border-border hover:bg-muted'
-                      }`}
-                    >
-                      <p className="font-medium">{t.label}</p>
-                      <p className="text-[11px] text-muted-foreground">{t.description}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Items Table */}
-            {productionItems.length > 0 && (
-              <div className="space-y-2">
-                <Label>Itens ({productionItems.filter(i => i.selected).length}/{productionItems.length} selecionados)</Label>
-                <div className="rounded-lg border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        {exitType !== 'INTEGRAL' && <TableHead className="w-10"></TableHead>}
-                        <TableHead>Produto</TableHead>
-                        <TableHead className="text-right">Necessário</TableHead>
-                        {exitType === 'FRACIONADA' && <TableHead className="text-right">Qtd Saída</TableHead>}
-                        <TableHead className="text-right">Estoque</TableHead>
-                        <TableHead className="text-center">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {productionItems.map((item, idx) => {
-                        const prod = products.find(p => p.id === item.productId);
-                        const stock = prod?.currentStock ?? 0;
-                        const qtyNeeded = exitType === 'FRACIONADA' ? item.deliveredQty : item.requiredQty;
-                        const sufficient = stock >= qtyNeeded;
-                        return (
-                          <TableRow key={item.productId} className={!item.selected && exitType !== 'INTEGRAL' ? 'opacity-40' : ''}>
-                            {exitType !== 'INTEGRAL' && (
-                              <TableCell>
-                                <Checkbox
-                                  checked={item.selected}
-                                  onCheckedChange={(checked) => {
-                                    setProductionItems(prev => prev.map((i, j) =>
-                                      j === idx ? { ...i, selected: !!checked } : i
-                                    ));
-                                  }}
-                                />
-                              </TableCell>
-                            )}
-                            <TableCell>
-                              <p className="font-mono text-xs">{item.productCode}</p>
-                              <p className="max-w-[200px] truncate text-xs text-muted-foreground">{item.productDescription}</p>
-                            </TableCell>
-                            <TableCell className="text-right font-medium">{item.requiredQty} {item.unit}</TableCell>
-                            {exitType === 'FRACIONADA' && (
-                              <TableCell className="text-right">
-                                <Input
-                                  type="number"
-                                  min="1"
-                                  max={stock}
-                                  value={item.deliveredQty}
-                                  onChange={e => {
-                                    const val = parseInt(e.target.value) || 1;
-                                    setProductionItems(prev => prev.map((i, j) =>
-                                      j === idx ? { ...i, deliveredQty: val } : i
-                                    ));
-                                  }}
-                                  className="h-8 w-20 ml-auto text-right"
-                                />
-                              </TableCell>
-                            )}
-                            <TableCell className={`text-right font-medium ${sufficient ? 'text-success' : 'text-destructive'}`}>
-                              {stock} {item.unit}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {sufficient ? (
-                                <Badge className="bg-success text-success-foreground">OK</Badge>
-                              ) : (
-                                <Badge variant="destructive">Insuficiente</Badge>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            )}
-
-            {/* Observations */}
-            <div className="space-y-2">
-              <Label>Observações</Label>
-              <Textarea
-                value={productionObservations}
-                onChange={e => setProductionObservations(e.target.value)}
-                rows={2}
-                placeholder="Nº pedido, NF, motivo..."
-              />
-            </div>
-
-            {/* User Info */}
-            <div className="rounded-lg bg-muted p-3 text-sm">
-              <p className="text-muted-foreground">
-                Registrado por: <span className="font-medium text-foreground">{currentUser || 'Sistema'}</span>
-              </p>
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setIsProductionDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleProductionSubmit}
-                disabled={!selectedCompositionId || productionItems.filter(i => i.selected).length === 0}
-              >
-                Confirmar Saída
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </AppLayout>
   );
 }

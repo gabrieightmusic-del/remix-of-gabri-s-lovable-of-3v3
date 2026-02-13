@@ -29,6 +29,15 @@ export const PRODUCTION_EXIT_TYPES: { value: ProductionExitType; label: string; 
 ];
 
 // Production order linked to composition movements
+export type ProductionStatus = 'CONCLUIDA' | 'ESTOCADA' | 'INCOMPLETA' | 'CANCELADA';
+
+export const PRODUCTION_STATUSES: { value: ProductionStatus; label: string; description: string }[] = [
+  { value: 'CONCLUIDA', label: 'Concluída', description: 'Finalizada e pronta para envio' },
+  { value: 'ESTOCADA', label: 'Estocada', description: 'Finalizada, mas armazenada em estoque' },
+  { value: 'INCOMPLETA', label: 'Incompleta', description: 'Ainda em montagem' },
+  { value: 'CANCELADA', label: 'Cancelada', description: 'Produção cancelada, itens retornam ao estoque' },
+];
+
 export interface ProductionOrder {
   id: string;
   compositionId: string;
@@ -37,9 +46,11 @@ export interface ProductionOrder {
   projectCode: string;
   exitType: ProductionExitType;
   items: ProductionOrderItem[];
-  status: 'ABERTA' | 'PARCIAL' | 'CONCLUIDA' | 'CANCELADA';
+  status: ProductionStatus;
+  productionStatus: ProductionStatus;
   collaborator: string;
   movementIds: string[];
+  compositionQty: number;
   createdAt: string;
   updatedAt: string;
 }
