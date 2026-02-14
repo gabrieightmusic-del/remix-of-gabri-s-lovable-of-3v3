@@ -1,107 +1,109 @@
 
-# Painel de Ordens de Produção — Rastreabilidade e Gestão de Status
 
-## Problema Atual
-Ao registrar uma saída para produção, o sistema:
-- Cria movimentações individuais por componente no historico
-- Salva uma `ProductionOrder` no localStorage, mas **nao exibe em lugar nenhum**
-- O campo "Status da Producao" (Concluida, Estocada, Incompleta, Cancelada) nao tem efeito pratico
+# Importacao Inteligente de Composicoes (BOM) via Planilha OMIE
 
-O usuario nao consegue:
-- Ver as ordens de producao existentes
-- Alterar o status de uma producao em andamento
-- Cancelar uma producao (com devolucao automatica ao estoque)
-- Rastrear quais itens ja foram baixados
+## Contexto
 
----
+A planilha exportada do OMIE possui uma estrutura onde cada linha representa um insumo de um produto acabado. O produto acabado se repete em varias linhas consecutivas, e cada linha traz um item/insumo diferente. O importador atual espera colunas especificas ("Codigo Composicao", "Codigo Produto") que nao correspondem ao formato real.
 
-## Solucao Proposta
+## Colunas relevantes da planilha OMIE
 
-### 1. Nova aba "Ordens de Producao" na pagina Movimentacoes
+| Coluna | Uso |
+|--------|-----|
+| Codigo do Produto | Codigo do Produto Acabado (agrupa a composicao) |
+| Descricao do Produto | Nome da composicao |
+| Codigo do Item | Codigo do insumo/componente |
+| Descricao do Item | Nome do insumo |
+| Quantidade do Item | Quantidade necessaria |
+| Unidade do Item | Unidade de medida do insumo |
 
-Adicionar uma segunda aba na pagina de Movimentacoes, ao lado do historico:
+## O que sera implementado
 
-```text
-[ Historico de Movimentacoes ]  [ Ordens de Producao ]
-```
+### 1. Novo fluxo de importacao com mapeamento de colunas
 
-Essa aba exibira uma tabela com todas as ordens de producao, contendo:
+Substituir o import direto atual por um fluxo multi-etapa (similar ao `ImportDialog` de produtos):
 
-| Coluna | Descricao |
-|--------|-----------|
-| Codigo da Composicao | Ex: COMP-001 - Mesa Industrial |
-| Projeto | Codigo do projeto vinculado |
-| Tipo de Saida | Integral / Parcial / Fracionada |
-| Qtd Composicoes | Quantas unidades foram produzidas |
-| Status | Badge colorido (Incompleta, Concluida, Estocada, Cancelada) |
-| Colaborador | Quem registrou |
-| Data | Quando foi criada |
-| Acoes | Botoes de alterar status e ver detalhes |
+1. **Upload** - Usuario seleciona o arquivo .xlsx/.xls/.csv
+2. **Mapeamento** - Sistema auto-detecta as colunas e permite ajuste manual. Campos mapeados:
+   - Codigo do Produto Acabado (obrigatorio)
+   - Descricao do Produto Acabado (obrigatorio)
+   - Codigo do Item/Insumo (obrigatorio)
+   - Descricao do Item/Insumo (obrigatorio)
+   - Quantidade do Item
+   - Unidade do Item
+3. **Preview** - Mostra as composicoes agrupadas com contagem de itens, status (nova/atualizar) e itens nao encontrados no cadastro
+4. **Importacao** - Executa a criacao/atualizacao das composicoes
 
-### 2. Dialog de Detalhes da Ordem
+### 2. Logica de agrupamento automatico
 
-Ao clicar em uma ordem, abre um dialog mostrando:
+O interpretador ira:
+- Ler todas as linhas da planilha
+- Agrupar por "Codigo do Produto Acabado" (todas as linhas com o mesmo codigo formam UMA composicao)
+- Para cada grupo, criar uma composicao com:
+  - `code` = Codigo do Produto Acabado
+  - `name` = Descricao do Produto Acabado
+  - `items` = Lista de todos os insumos do grupo
 
-- Informacoes gerais (composicao, projeto, tipo de saida, colaborador)
-- **Tabela de itens processados**: cada componente com quantidade solicitada, quantidade entregue, e status individual
-- **Movimentacoes vinculadas**: lista das movimentacoes geradas, com link para o historico
-- **Seletor de status** para alterar o estado da producao
+### 3. Tratamento de itens/insumos
 
-### 3. Logica de Alteracao de Status
+Para cada insumo listado na planilha:
+- **Se o produto existe no cadastro**: vincula pelo ID, usa dados do cadastro
+- **Se o produto NAO existe**: cria o item na composicao com os dados da planilha (codigo, descricao, quantidade, unidade) e marca visualmente como "produto nao cadastrado" no preview
 
-Cada transicao de status tera um comportamento especifico:
+### 4. Tratamento de composicoes duplicadas
 
-- **Incompleta -> Concluida**: Apenas marca como finalizada. Nenhuma alteracao de estoque.
-- **Incompleta -> Estocada**: Marca como finalizada e armazenada. Nenhuma alteracao de estoque.
-- **Qualquer -> Cancelada**: **Reverte automaticamente** todas as movimentacoes vinculadas, devolvendo os itens ao estoque. Cria movimentacoes de tipo DEVOLUCAO com observacao automatica indicando o cancelamento.
-- **Cancelada -> reabrir**: Nao permitido (status final).
+- **Se a composicao ja existe no sistema** (mesmo codigo): marcar como "Atualizar" no preview — ao importar, substitui os itens da composicao existente
+- **Se e nova**: marcar como "Nova" no preview
 
-### 4. Indicador Visual no Historico
+### 5. Auto-deteccao de colunas
 
-No historico de movimentacoes, as movimentacoes que pertencem a uma producao ganharao:
-- Um badge ou icone indicando que fazem parte de uma Ordem de Producao
-- O codigo da composicao visivel na linha
-- Tooltip ou link para abrir os detalhes da ordem
+O sistema tentara identificar automaticamente as colunas usando palavras-chave:
+- `codigo.*produto` ou `cod.*acabado` -> Codigo do Produto Acabado
+- `descri.*produto` ou `desc.*acabado` -> Descricao do Produto Acabado
+- `codigo.*item` ou `cod.*insumo` -> Codigo do Item
+- `descri.*item` ou `desc.*insumo` -> Descricao do Item
+- `quantidade` ou `qtd` -> Quantidade
+- `unidade.*item` ou `un.*item` -> Unidade
 
 ---
 
 ## Detalhes Tecnicos
 
-### Arquivos modificados
+### Arquivo modificado
 
-1. **`src/pages/Movimentacoes.tsx`**
-   - Adicionar componente de Tabs (Historico | Ordens de Producao)
-   - Criar tabela de ordens de producao com filtros e busca
-   - Dialog de detalhes da ordem com tabela de itens e movimentacoes
-   - Seletor de status com confirmacao (AlertDialog para cancelamento)
-   - Badge de producao nas linhas do historico
+**`src/pages/Composicoes.tsx`**
 
-2. **`src/hooks/useInventory.ts`**
-   - Criar funcao `cancelProductionOrder(id)` que:
-     - Busca todos os `movementIds` da ordem
-     - Reverte o estoque de cada movimentacao (incrementa `currentStock`)
-     - Cria movimentacoes de DEVOLUCAO automaticas
-     - Atualiza o status da ordem para CANCELADA
-   - Expor `productionOrders` e `updateProductionOrder` no contexto (ja existem, mas nao estao sendo usados na interface)
+- Substituir a funcao `handleImport` (linhas 147-211) por um dialog multi-etapa completo
+- Criar componente `CompositionImportDialog` inline ou separado, com os seguintes estados:
+  - `upload`: selecao de arquivo
+  - `mapping`: mapeamento de colunas com auto-deteccao
+  - `preview`: tabela agrupada mostrando composicoes detectadas, quantidade de itens, status (nova/atualizar), e itens sem cadastro
+  - `done`: resultado final
 
-3. **`src/contexts/InventoryContext.tsx`**
-   - Expor `productionOrders`, `updateProductionOrder` e `cancelProductionOrder` no contexto
-
-### Fluxo de cancelamento
+### Fluxo de dados
 
 ```text
-Usuario clica "Cancelar Producao"
-  -> AlertDialog de confirmacao
-  -> Para cada movimentacao vinculada:
-     -> Incrementa estoque do produto
-     -> Cria movimentacao DEVOLUCAO automatica
-  -> Status da ordem = CANCELADA
-  -> Toast de confirmacao
+Planilha OMIE
+  -> Leitura com XLSX.js
+  -> Auto-deteccao de colunas
+  -> Mapeamento manual (ajustavel)
+  -> Agrupamento por Codigo do Produto Acabado
+  -> Para cada grupo:
+     -> Busca produto no cadastro (por codigo)
+     -> Se existe: vincula productId
+     -> Se nao existe: usa dados da planilha (sem productId)
+  -> Preview com status nova/atualizar
+  -> Importacao: addComposition ou updateComposition
 ```
 
-### Cores dos badges de status
+### Estrutura do preview
 
-- **Incompleta**: Amarelo/warning
-- **Concluida**: Verde/success
-- **Estocada**: Azul/info
-- **Cancelada**: Vermelho/destructive
+A tela de preview mostrara:
+
+| Composicao | Descricao | Itens | Itens sem cadastro | Status |
+|------------|-----------|-------|--------------------|--------|
+| 0000000554 | Cir - Controlador De Automacao 3V3 | 42 | 3 | Nova |
+| 0000000555 | Outro Produto | 15 | 0 | Atualizar |
+
+Com possibilidade de expandir cada composicao para ver os itens individuais.
+
