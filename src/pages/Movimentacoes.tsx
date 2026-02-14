@@ -141,10 +141,19 @@ export default function Movimentacoes() {
     sublabel: `${c.items.length} itens`,
   }));
 
+  const compositionProjectOptions = compositions.map(c => ({
+    value: c.code,
+    label: `${c.code} - ${c.name}`,
+    sublabel: `${c.items.length} itens${!c.isActive ? ' · Inativa' : ''}`,
+    keywords: [c.code, c.name],
+  }));
+
   const handleSelectComposition = (compId: string) => {
     setSelectedCompositionId(compId);
     const comp = compositions.find(c => c.id === compId);
     if (!comp) return;
+    // Auto-fill projectCode with composition code
+    setFormData(f => ({ ...f, projectCode: comp.code }));
     setProductionItems(comp.items.map(item => ({
       productId: item.productId,
       productCode: item.productCode,
@@ -479,11 +488,14 @@ export default function Movimentacoes() {
                         <p className="text-[11px] text-muted-foreground">Quantas composições serão produzidas</p>
                       </div>
                       <div className="space-y-2">
-                        <Label>Código do Projeto</Label>
-                        <Input
+                        <Label>Código do Projeto (Composição)</Label>
+                        <SearchableSelect
+                          options={compositionProjectOptions}
                           value={formData.projectCode}
-                          onChange={e => setFormData(f => ({ ...f, projectCode: e.target.value }))}
-                          placeholder="Ex: PRD01733"
+                          onValueChange={(value) => setFormData(f => ({ ...f, projectCode: value }))}
+                          placeholder="Selecione a composição/projeto..."
+                          searchPlaceholder="Buscar por código ou nome..."
+                          emptyMessage="Nenhuma composição encontrada."
                         />
                       </div>
                     </div>
@@ -667,17 +679,17 @@ export default function Movimentacoes() {
                       />
                     </div>
 
-                    {formData.purpose === 'PRODUCAO' && (
-                      <div className="space-y-2">
-                        <Label htmlFor="projectCode">Código do Projeto/Equipamento</Label>
-                        <Input
-                          id="projectCode"
-                          value={formData.projectCode}
-                          onChange={e => setFormData(f => ({ ...f, projectCode: e.target.value }))}
-                          placeholder="Ex: PRD01733, 0000000726"
-                        />
-                      </div>
-                    )}
+                    <div className="space-y-2">
+                      <Label>Código do Projeto (Composição)</Label>
+                      <SearchableSelect
+                        options={compositionProjectOptions}
+                        value={formData.projectCode}
+                        onValueChange={(value) => setFormData(f => ({ ...f, projectCode: value }))}
+                        placeholder="Selecione a composição/projeto..."
+                        searchPlaceholder="Buscar por código ou nome..."
+                        emptyMessage="Nenhuma composição encontrada."
+                      />
+                    </div>
 
                     <div className="space-y-2">
                       <Label>
