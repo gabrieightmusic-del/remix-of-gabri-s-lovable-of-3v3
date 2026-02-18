@@ -162,7 +162,7 @@ export default function Produtos() {
                     Novo Produto
                   </Button>
                 </DialogTrigger>
-              <DialogContent className="max-w-md">
+              <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>
                     {editingProduct ? 'Editar Produto' : 'Novo Produto'}
