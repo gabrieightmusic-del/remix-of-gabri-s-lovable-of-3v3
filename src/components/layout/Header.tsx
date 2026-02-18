@@ -1,9 +1,18 @@
+import { useState, useEffect, useMemo } from 'react';
 import { Bell, Search, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useInventoryContext } from '@/contexts/InventoryContext';
 import { CollaboratorManagementDialog } from '@/components/collaborators/CollaboratorManagementDialog';
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,9 +28,49 @@ interface HeaderProps {
 }
 
 export function Header({ title, subtitle }: HeaderProps) {
-  const { alerts, currentUser, collaborators, setUser } = useInventoryContext();
+  const { alerts, currentUser, collaborators, setUser, products, compositions } = useInventoryContext();
+  const navigate = useNavigate();
   const unreadAlerts = alerts.filter(a => !a.isRead).length;
   const activeCollaborators = collaborators.filter(c => !c.isBlocked);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Cmd+K shortcut
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setSearchOpen(open => !open);
+      }
+    };
+    document.addEventListener('keydown', down);
+    return () => document.removeEventListener('keydown', down);
+  }, []);
+
+  const productResults = useMemo(() =>
+    products.map(p => ({
+      id: p.id,
+      label: `${p.code} — ${p.description}`,
+      sublabel: `Estoque: ${p.currentStock} ${p.unit} · ${p.location || 'Sem endereço'}`,
+      type: 'product' as const,
+    })),
+    [products]
+  );
+
+  const compositionResults = useMemo(() =>
+    compositions.map(c => ({
+      id: c.id,
+      label: `${c.code} — ${c.name}`,
+      sublabel: `${c.items.length} itens · ${c.isActive ? 'Ativa' : 'Inativa'}`,
+      type: 'composition' as const,
+    })),
+    [compositions]
+  );
+
+  const handleSelect = (type: string) => {
+    setSearchOpen(false);
+    if (type === 'product') navigate('/produtos');
+    else if (type === 'composition') navigate('/composicoes');
+  };
 
   return (
     <header className="sticky top-0 z-40 flex h-[72px] items-center justify-between border-b border-border/60 bg-background/80 px-8 backdrop-blur-xl">
@@ -33,14 +82,46 @@ export function Header({ title, subtitle }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Search */}
-        <div className="relative hidden lg:block">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
-          <Input 
-            placeholder="Buscar produto ou código..." 
-            className="h-9 w-60 rounded-lg border-border/60 bg-muted/50 pl-9 text-[13px] placeholder:text-muted-foreground/50 focus-visible:bg-background"
-          />
-        </div>
+        {/* Search Trigger */}
+        <Button
+          variant="ghost"
+          onClick={() => setSearchOpen(true)}
+          className="relative hidden h-9 w-60 justify-start rounded-lg border border-border/60 bg-muted/50 px-3 text-[13px] text-muted-foreground/60 hover:bg-background lg:flex"
+        >
+          <Search className="mr-2 h-4 w-4" />
+          Buscar produto ou código...
+          <kbd className="pointer-events-none ml-auto inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+            ⌘K
+          </kbd>
+        </Button>
+
+        {/* Command Palette */}
+        <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
+          <CommandInput placeholder="Buscar produto, composição..." />
+          <CommandList>
+            <CommandEmpty>Nenhum resultado encontrado.</CommandEmpty>
+            <CommandGroup heading="Produtos">
+              {productResults.map(item => (
+                <CommandItem key={item.id} onSelect={() => handleSelect('product')}>
+                  <div>
+                    <p className="text-sm font-medium">{item.label}</p>
+                    <p className="text-xs text-muted-foreground">{item.sublabel}</p>
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandGroup heading="Composições">
+              {compositionResults.map(item => (
+                <CommandItem key={item.id} onSelect={() => handleSelect('composition')}>
+                  <div>
+                    <p className="text-sm font-medium">{item.label}</p>
+                    <p className="text-xs text-muted-foreground">{item.sublabel}</p>
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </CommandDialog>
 
         {/* Collaborator Management */}
         <CollaboratorManagementDialog />
@@ -58,7 +139,7 @@ export function Header({ title, subtitle }: HeaderProps) {
         {/* Separator */}
         <div className="mx-1 h-6 w-px bg-border/60" />
 
-        {/* User selector - only active/unblocked collaborators */}
+        {/* User selector */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-9 gap-2.5 rounded-lg px-2 text-[13px] font-medium text-muted-foreground hover:text-foreground">

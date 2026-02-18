@@ -156,3 +156,9 @@
     @apply shadow-md border-border;
   }
 }
+
+/* Ensure all pages are scrollable */
+html, body, #root {
+  height: 100%;
+  overflow: auto;
+}
